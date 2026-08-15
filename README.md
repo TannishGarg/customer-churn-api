@@ -1,4 +1,4 @@
-# customer-churn-api
+# Customer-churn-api
 
 A deployed customer churn prediction model: a real-time Flask inference API plus an
 overnight batch-scoring pipeline that scores all active customers and logs basic
@@ -22,6 +22,7 @@ customer-churn-api/
 │
 ├── batch.py                 # Batch scoring script
 ├── train_model.py           # One-off training script used to produce model.pkl / transformer.pkl
+├── gold_churn_data.csv       # Source data train_model.py trains on
 ├── requirements.txt         # Python dependencies
 ├── README.md                # This file
 └── .gitignore
@@ -84,14 +85,20 @@ logs total requests, failures, and average churn probability to
 
 Retrain on a **fixed monthly cadence**, or immediately if monitoring (below) flags a
 meaningful drop in prediction quality. Retraining reruns `train_model.py` against the
-latest export of `gold_churn_data.csv`, refits both the `ColumnTransformer` and the
-`RandomForestClassifier` together (never one without the other, since a stale
-transformer silently corrupts inputs to a fresh model), and evaluates the new model
-against a held-out test split using the same accuracy/precision/recall/F1 checks from
-the Module 6 evaluation before it's allowed to replace the production artifacts. New
-`model.pkl` / `transformer.pkl` only replace the live versions after passing that
-check — this stops a bad retrain from silently overwriting a working model. Any
-schema change upstream (new columns, renamed categories) should also trigger an
+latest export of `gold_churn_data.csv`, which refits both the `ColumnTransformer` and
+the `RandomForestClassifier` together (never one without the other, since a stale
+transformer silently corrupts inputs to a fresh model) and prints train/test accuracy
+so a regression is visible immediately after each run.
+
+Today that check is manual: whoever runs `train_model.py` reviews the printed
+accuracy before copying the new `model.pkl` / `transformer.pkl` into `app/`. The
+natural next step is to make this automatic — have the script compute
+precision/recall/F1 on a held-out split (matching the Module 6 evaluation) and refuse
+to overwrite the live artifacts unless the new model matches or beats the current
+one on those metrics. That gate would stop a bad retrain from silently replacing a
+working model, which the current script does not yet prevent on its own.
+
+Any schema change upstream (new columns, renamed categories) should also trigger an
 out-of-cycle retrain, since the preprocessing pipeline is fit to a specific column
 set and will silently ignore unseen categories rather than error.
 
